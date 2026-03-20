@@ -12,24 +12,40 @@ app.get('/stream', (req, res) => {
     request({
         url: fullUrl,
         headers: {
-            'Referer': 'https://masukestin.com/'
+            'Referer': 'https://masukestin.com/',
+            'User-Agent': 'Mozilla/5.0'
         }
     }).on('response', function(response) {
         const contentType = response.headers['content-type'];
 
+        // Si es playlist (.m3u8)
         if (contentType && contentType.includes('application/vnd.apple.mpegurl')) {
             let body = '';
 
             response.on('data', chunk => body += chunk);
             response.on('end', () => {
-                const modified = body.replace(/(.*\.m3u8|.*\.ts)/g, (match) => {
-                    return '/stream?url=' + encodeURIComponent(match);
-                });
+
+                const modified = body.split('\n').map(line => {
+                    if (
+                        line &&
+                        !line.startsWith('#') &&
+                        (line.includes('.m3u8') || line.includes('.ts'))
+                    ) {
+                        return '/stream?url=' + encodeURIComponent(line);
+                    }
+                    return line;
+                }).join('\n');
+
+                res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
                 res.send(modified);
             });
+
         } else {
+            // Si es video (.ts u otro)
             response.pipe(res);
         }
+    }).on('error', err => {
+        res.status(500).send('Error en proxy');
     });
 });
 
